@@ -26,8 +26,8 @@ def validate_model(X, Y, classifier, split_generator=lambda Y: StratifiedKFold(Y
 def sparse_validate_model(X, Y, classifier, split_generator=lambda Y: StratifiedKFold(Y, n_folds=3)):
     count=0
     for train_index, test_index in split_generator(Y):
-        X_train, Y_train = X[list(train_index)], Y.iloc[train_index]
-        X_test, Y_test = X[list(train_index)], Y.iloc[test_index]
+        X_train, Y_train = X[list(train_index)], Y[train_index]
+        X_test, Y_test = X[list(train_index)], Y[test_index]
         count+=1
         print_log("starting iteration "+str(count))
         classifier.fit(X_train, Y_train)
