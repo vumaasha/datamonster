@@ -12,6 +12,7 @@ from sklearn.base import clone
 from sklearn.tree import DecisionTreeClassifier
 from scipy.sparse import csr_matrix,vstack,hstack
 from sklearn.feature_extraction import DictVectorizer
+from sklearn.svm import LinearSVC
 from .util import *
 # ## Read raw data as lines
 
@@ -176,7 +177,31 @@ def submission_5():
     learn_model_for_missing_category(missing_train_df, unpredicted,clone(clf))
     missing_predicted = apply_model_for_missing_category(unpredicted)
     predictions.loc[missing_predicted.index,'predicted_brand_id'] = missing_predicted.predicted_brand_id
-    predictions.predicted_brand_id.to_csv('category_wise_log_reg.csv',index=False)
+    predictions.predicted_brand_id.to_csv('category_wise_decision_tree.csv',index=False)
+
+def submission_6():
+    clf = LinearSVC()
+    log_reg_learn = lambda df:learn_model_for_category(df,clone(clf))
+
+    cat_models = train.groupby('category_id').apply(learn_model_for_category)
+    predictions = test.groupby('category_id').apply(apply_model_for_category)
+    predictions.loc[predictions.index,'predicted_brand_id'] = predictions.predicted_brand_id.astype(int)
+    unpredicted = predictions.query('predicted_brand_id == -1')
+
+    tokenize = Tokenizer()
+    test_vectorizer = TfidfVectorizer(tokenizer=tokenize())
+    test_vectorizer.fit(unpredicted.product_title)
+
+    vocab = test_vectorizer.vocabulary_.keys()
+    missing_relevant_train = train['product_title'].apply(lambda x:vocab.isdisjoint(tokenize(x)))
+    missing_train = train[~missing_relevant_train]
+    # get top 5 popular categories
+    mc = missing_train.category_id.value_counts()
+    missing_train_df = missing_train[missing_train.category_id.isin(mc[:5].index)]
+    learn_model_for_missing_category(missing_train_df, unpredicted,clone(clf))
+    missing_predicted = apply_model_for_missing_category(unpredicted)
+    predictions.loc[missing_predicted.index,'predicted_brand_id'] = missing_predicted.predicted_brand_id
+    predictions.predicted_brand_id.to_csv('category_wise_linear_svc.csv',index=False)
 
 def find_similar_brands():
     # to find duplicate brands
