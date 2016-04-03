@@ -10,10 +10,11 @@ from sklearn.externals import joblib
 from sklearn.linear_model import LogisticRegression
 from sklearn.base import clone
 from sklearn.tree import DecisionTreeClassifier
-from scipy.sparse import csr_matrix,vstack,hstack
+from scipy.sparse import csr_matrix, vstack, hstack
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.svm import LinearSVC
 from .util import *
+
 # ## Read raw data as lines
 
 raw_train = pd.DataFrame([line for line in open('../data/classification_train.tsv', encoding='utf8')], columns=['line'])
@@ -43,76 +44,78 @@ def submission_2():
     category_wise_popular_brand_submission.to_csv('category_wise_popular_brand_submission.csv', index=False)
 
 
-
-
 class Tokenizer(object):
     def __init__(self):
         self.tokenizer = word_tokenize
         self.stop_words = set(
-        ['is', 'of', 'it', 'at', 'on', 'and', 'as', 'the', 'to', 'are', 'this', 'that', 'be', 'in',
-          'an', 'or','any', 'all', 'am','you','we', '__NUMBER__', '__SERIAL__'])
+            ['is', 'of', 'it', 'at', 'on', 'and', 'as', 'the', 'to', 'are', 'this', 'that', 'be', 'in',
+             'an', 'or', 'any', 'all', 'am', 'you', 'we', '__NUMBER__', '__SERIAL__'])
 
     def __call__(self, text):
         text = text.lower()
         # replace special characters
-        text = re.sub(r'[^a-z0-9\s/\\_\t,\-]', '', text,flags=re.IGNORECASE)
-        text = re.sub(r'[/\\_\t,-]', ' ', text,flags=re.IGNORECASE)
+        text = re.sub(r'[^a-z0-9\s/\\_\t,\-]', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'[/\\_\t,-]', ' ', text, flags=re.IGNORECASE)
         # replace numbers to reduce number of features
         text = re.sub(r'\b[0-9]+\b', ' __NUMBER__ ', text)
         # replace possible product/serial numbers
         text = re.sub(r'\b\w*\d+\w*\d?\b', ' __SERIAL__ ', text)
 
-        tokens = [w for w in self.tokenizer(text) if (w not in self.stop_words and len(w)>1)]
+        tokens = [w for w in self.tokenizer(text) if (w not in self.stop_words and len(w) > 1)]
         # only return first and last two tokens
-        return tokens if len(tokens) <5 else tokens[:3] + tokens[-2:]
+        return tokens if len(tokens) < 5 else tokens[:3] + tokens[-2:]
 
-def learn_model_for_category(train_df,learner=MultinomialNB()):
+
+def learn_model_for_category(train_df, learner=MultinomialNB()):
     category = train_df.category_id.iloc[0]
     vectorizer = TfidfVectorizer(tokenizer=Tokenizer())
     estimators = [('transform', vectorizer), ('learner', learner)]
     pipe_line = Pipeline(estimators)
-    pipe_line.fit(train_df['product_title'].values,train_df['brand_id'].astype(int))
-    joblib.dump(pipe_line,'category_'+str(category)+'_model.clf')
+    pipe_line.fit(train_df['product_title'].values, train_df['brand_id'].astype(int))
+    joblib.dump(pipe_line, 'category_' + str(category) + '_model.clf')
     return True
+
 
 def apply_model_for_category(test_df):
     category = test_df.category_id.iloc[0]
     try:
-        learner = joblib.load('category_'+str(category)+'_model.clf')
-        test_df.loc[test_df.index,'predicted_brand_id'] = learner.predict(test_df['product_title'].values)
+        learner = joblib.load('category_' + str(category) + '_model.clf')
+        test_df.loc[test_df.index, 'predicted_brand_id'] = learner.predict(test_df['product_title'].values)
         return test_df
     except Exception as e:
-        print(e,test_df.shape)
-        test_df.loc[test_df.index,'predicted_brand_id'] = -1
+        print(e, test_df.shape)
+        test_df.loc[test_df.index, 'predicted_brand_id'] = -1
         return test_df
 
-def learn_model_for_missing_category(train_df, test_df,learner=MultinomialNB()):
+
+def learn_model_for_missing_category(train_df, test_df, learner=MultinomialNB()):
     test_vectorizer = TfidfVectorizer(tokenizer=Tokenizer())
     test_vectorizer.fit(test_df.product_title)
     category = "missing"
     vectorizer = TfidfVectorizer(tokenizer=Tokenizer(), vocabulary=test_vectorizer.vocabulary_)
     estimators = [('transform', vectorizer), ('learner', learner)]
     pipe_line = Pipeline(estimators)
-    pipe_line.fit(train_df['product_title'].values,train_df['brand_id'].astype(int))
-    joblib.dump(pipe_line,'category_'+str(category)+'_model.clf')
+    pipe_line.fit(train_df['product_title'].values, train_df['brand_id'].astype(int))
+    joblib.dump(pipe_line, 'category_' + str(category) + '_model.clf')
     return True
+
 
 def apply_model_for_missing_category(test_df):
     category = 'missing'
     try:
-        learner = joblib.load('category_'+str(category)+'_model.clf')
-        test_df.loc[test_df.index,'predicted_brand_id'] = learner.predict(test_df['product_title'].values)
+        learner = joblib.load('category_' + str(category) + '_model.clf')
+        test_df.loc[test_df.index, 'predicted_brand_id'] = learner.predict(test_df['product_title'].values)
         return test_df
     except Exception as e:
-        print(e,test_df.shape)
-        test_df.loc[test_df.index,'predicted_brand_id'] = -1
+        print(e, test_df.shape)
+        test_df.loc[test_df.index, 'predicted_brand_id'] = -1
         return test_df
 
 
 def submission_3():
     cat_models = train.groupby('category_id').apply(learn_model_for_category)
     predictions = test.groupby('category_id').apply(apply_model_for_category)
-    predictions.loc[predictions.index,'predicted_brand_id'] = predictions.predicted_brand_id.astype(int)
+    predictions.loc[predictions.index, 'predicted_brand_id'] = predictions.predicted_brand_id.astype(int)
     unpredicted = predictions.query('predicted_brand_id == -1')
 
     tokenize = Tokenizer()
@@ -120,24 +123,24 @@ def submission_3():
     test_vectorizer.fit(unpredicted.product_title)
 
     vocab = test_vectorizer.vocabulary_.keys()
-    missing_relevant_train = train['product_title'].apply(lambda x:vocab.isdisjoint(tokenize(x)))
+    missing_relevant_train = train['product_title'].apply(lambda x: vocab.isdisjoint(tokenize(x)))
     missing_train = train[~missing_relevant_train]
     # get top 5 popular categories
     mc = missing_train.category_id.value_counts()
     missing_train_df = missing_train[missing_train.category_id.isin(mc[:5].index)]
     learn_model_for_missing_category(missing_train_df, unpredicted)
     missing_predicted = apply_model_for_missing_category(unpredicted)
-    predictions.loc[missing_predicted.index,'predicted_brand_id'] = missing_predicted.predicted_brand_id
-    predictions.predicted_brand_id.to_csv('category_wise_mnb.csv',index=False)
+    predictions.loc[missing_predicted.index, 'predicted_brand_id'] = missing_predicted.predicted_brand_id
+    predictions.predicted_brand_id.to_csv('category_wise_mnb.csv', index=False)
 
 
 def submission_4():
     clf = LogisticRegression()
-    log_reg_learn = lambda df:learn_model_for_category(df,clone(clf))
+    log_reg_learn = lambda df: learn_model_for_category(df, clone(clf))
 
     cat_models = train.groupby('category_id').apply(learn_model_for_category)
     predictions = test.groupby('category_id').apply(apply_model_for_category)
-    predictions.loc[predictions.index,'predicted_brand_id'] = predictions.predicted_brand_id.astype(int)
+    predictions.loc[predictions.index, 'predicted_brand_id'] = predictions.predicted_brand_id.astype(int)
     unpredicted = predictions.query('predicted_brand_id == -1')
 
     tokenize = Tokenizer()
@@ -145,23 +148,24 @@ def submission_4():
     test_vectorizer.fit(unpredicted.product_title)
 
     vocab = test_vectorizer.vocabulary_.keys()
-    missing_relevant_train = train['product_title'].apply(lambda x:vocab.isdisjoint(tokenize(x)))
+    missing_relevant_train = train['product_title'].apply(lambda x: vocab.isdisjoint(tokenize(x)))
     missing_train = train[~missing_relevant_train]
     # get top 5 popular categories
     mc = missing_train.category_id.value_counts()
     missing_train_df = missing_train[missing_train.category_id.isin(mc[:5].index)]
-    learn_model_for_missing_category(missing_train_df, unpredicted,clone(clf))
+    learn_model_for_missing_category(missing_train_df, unpredicted, clone(clf))
     missing_predicted = apply_model_for_missing_category(unpredicted)
-    predictions.loc[missing_predicted.index,'predicted_brand_id'] = missing_predicted.predicted_brand_id
-    predictions.predicted_brand_id.to_csv('category_wise_log_reg.csv',index=False)
+    predictions.loc[missing_predicted.index, 'predicted_brand_id'] = missing_predicted.predicted_brand_id
+    predictions.predicted_brand_id.to_csv('category_wise_log_reg.csv', index=False)
+
 
 def submission_5():
     clf = DecisionTreeClassifier()
-    log_reg_learn = lambda df:learn_model_for_category(df,clone(clf))
+    log_reg_learn = lambda df: learn_model_for_category(df, clone(clf))
 
     cat_models = train.groupby('category_id').apply(learn_model_for_category)
     predictions = test.groupby('category_id').apply(apply_model_for_category)
-    predictions.loc[predictions.index,'predicted_brand_id'] = predictions.predicted_brand_id.astype(int)
+    predictions.loc[predictions.index, 'predicted_brand_id'] = predictions.predicted_brand_id.astype(int)
     unpredicted = predictions.query('predicted_brand_id == -1')
 
     tokenize = Tokenizer()
@@ -169,23 +173,24 @@ def submission_5():
     test_vectorizer.fit(unpredicted.product_title)
 
     vocab = test_vectorizer.vocabulary_.keys()
-    missing_relevant_train = train['product_title'].apply(lambda x:vocab.isdisjoint(tokenize(x)))
+    missing_relevant_train = train['product_title'].apply(lambda x: vocab.isdisjoint(tokenize(x)))
     missing_train = train[~missing_relevant_train]
     # get top 5 popular categories
     mc = missing_train.category_id.value_counts()
     missing_train_df = missing_train[missing_train.category_id.isin(mc[:5].index)]
-    learn_model_for_missing_category(missing_train_df, unpredicted,clone(clf))
+    learn_model_for_missing_category(missing_train_df, unpredicted, clone(clf))
     missing_predicted = apply_model_for_missing_category(unpredicted)
-    predictions.loc[missing_predicted.index,'predicted_brand_id'] = missing_predicted.predicted_brand_id
-    predictions.predicted_brand_id.to_csv('category_wise_decision_tree.csv',index=False)
+    predictions.loc[missing_predicted.index, 'predicted_brand_id'] = missing_predicted.predicted_brand_id
+    predictions.predicted_brand_id.to_csv('category_wise_decision_tree.csv', index=False)
+
 
 def submission_6():
     clf = LinearSVC()
-    log_reg_learn = lambda df:learn_model_for_category(df,clone(clf))
+    log_reg_learn = lambda df: learn_model_for_category(df, clone(clf))
 
     cat_models = train.groupby('category_id').apply(learn_model_for_category)
     predictions = test.groupby('category_id').apply(apply_model_for_category)
-    predictions.loc[predictions.index,'predicted_brand_id'] = predictions.predicted_brand_id.astype(int)
+    predictions.loc[predictions.index, 'predicted_brand_id'] = predictions.predicted_brand_id.astype(int)
     unpredicted = predictions.query('predicted_brand_id == -1')
 
     tokenize = Tokenizer()
@@ -193,15 +198,16 @@ def submission_6():
     test_vectorizer.fit(unpredicted.product_title)
 
     vocab = test_vectorizer.vocabulary_.keys()
-    missing_relevant_train = train['product_title'].apply(lambda x:vocab.isdisjoint(tokenize(x)))
+    missing_relevant_train = train['product_title'].apply(lambda x: vocab.isdisjoint(tokenize(x)))
     missing_train = train[~missing_relevant_train]
     # get top 5 popular categories
     mc = missing_train.category_id.value_counts()
     missing_train_df = missing_train[missing_train.category_id.isin(mc[:5].index)]
-    learn_model_for_missing_category(missing_train_df, unpredicted,clone(clf))
+    learn_model_for_missing_category(missing_train_df, unpredicted, clone(clf))
     missing_predicted = apply_model_for_missing_category(unpredicted)
-    predictions.loc[missing_predicted.index,'predicted_brand_id'] = missing_predicted.predicted_brand_id
-    predictions.predicted_brand_id.to_csv('category_wise_linear_svc.csv',index=False)
+    predictions.loc[missing_predicted.index, 'predicted_brand_id'] = missing_predicted.predicted_brand_id
+    predictions.predicted_brand_id.to_csv('category_wise_linear_svc.csv', index=False)
+
 
 def find_similar_brands():
     # to find duplicate brands
@@ -225,10 +231,10 @@ def find_similar_brands():
     # group by brand and aggregate tf-idf information
     brands = train['brand_id'].values
     unique_brands = np.unique(brands)
-    joined_data_grouped = csr_matrix(np.zeros((1,joined_data.shape[1])))
+    joined_data_grouped = csr_matrix(np.zeros((1, joined_data.shape[1])))
     for brand in unique_brands:
         grp_sum = joined_data[brands == brand].sum(axis=0)
-        joined_data_grouped = vstack([joined_data_grouped,grp_sum])
+        joined_data_grouped = vstack([joined_data_grouped, grp_sum])
 
     joined_data_grouped = csr_matrix(joined_data_grouped)
     joined_data_grouped = joined_data_grouped[1:]
@@ -239,17 +245,37 @@ def find_similar_brands():
     # query for five nearest neighbors for each brand
     distances, indices = lshf.kneighbors(joined_data_grouped, n_neighbors=5)
 
-    dist_neighbors = np.hstack([distances,unique_brands[indices]])
-    dist_neighbors_df = pd.DataFrame(dist_neighbors,columns=['d1','d2','d3','d4','d5','brand_1',
-                                                         'brand_2','brand_3','brand_4','brand_5'])
-    dist_neighbors_df = dist_neighbors_df.set_index('brand_1')
+    dist_neighbors = np.hstack([distances, unique_brands[indices]])
+    dist_neighbors_df = pd.DataFrame(dist_neighbors, columns=['d1', 'd2', 'd3', 'd4', 'd5', 'brand_1',
+                                                              'brand_2', 'brand_3', 'brand_4', 'brand_5'])
     del dist_neighbors_df['d1']
-    dist_neighbors_df.to_csv('similar_brands.csv')
+
+    # unpivot
+    dist_neighbors_df_meleted = pd.melt(dist_neighbors_df, id_vars=['brand_1'],
+                                        value_vars=['brand_2', 'brand_3', 'brand_4', 'brand_5'])
+    dist_neighbors_dist_meleted = pd.melt(dist_neighbors_df, id_vars=['brand_1'], value_vars=['d2', 'd3', 'd4', 'd5'])
+    knn_df = pd.merge(dist_neighbors_df_meleted, dist_neighbors_dist_meleted, how='inner', on='brand_1')
+    knn_df = knn_df.sort_values(by=['brand_1', 'value_y'], ascending=True)
+    zero_dist_neighbors = knn_df[knn_df['value_y'].astype(float) == 0]
+    zero_dist_neighbors = zero_dist_neighbors.drop_duplicates(subset=['brand_1', 'value_x'])
+    possible_duplicates = zero_dist_neighbors[['brand_1', 'value_x']]
+    possible_duplicates.columns = ['brand_id', 'duplicate_brand_id']
+    possible_duplicates.to_csv('possible_brand_duplicates.csv', index=False)
+
+    main_product_title = pd.merge(possible_duplicates, train, on='brand_id')[
+        ['brand_id', 'duplicate_brand_id', 'product_title']]
+    main_product_title.columns = ['main_brand_id', 'duplicate_brand_id', 'main_product_title']
+    dup_product_title = pd.merge(main_product_title, train, right_on='brand_id', left_on='duplicate_brand_id',
+                                 how='inner')
+    dup_product_title = dup_product_title[['brand_id', 'duplicate_brand_id',
+                                           'main_product_title',
+                                           'product_title']]
+    dup_product_title.columns = ['brand_id', 'duplicate_brand_id', 'main_product_title', 'dup_product_title']
+    dup_product_title.to_csv('possible_duplicates.csv',index=False)
+
 
 # generating submissions
 submission_2()
 submission_3()
 submission_4()
 submission_5()
-
-
