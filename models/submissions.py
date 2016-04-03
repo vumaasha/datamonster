@@ -209,11 +209,17 @@ def find_similar_brands():
     joined_data_grouped = joined_data_grouped[1:]
 
     # fit a LSH forest tree on aggregated data
-    lshf = LSHForest(n_estimators=100,random_state=42)
+    lshf = LSHForest(random_state=42)
     lshf.fit(joined_data_grouped)
     # query for five nearest neighbors for each brand
     distances, indices = lshf.kneighbors(joined_data_grouped, n_neighbors=5)
-    return distances,indices
+
+    dist_neighbors = np.hstack([distances,unique_brands[indices]])
+    dist_neighbors_df = pd.DataFrame(dist_neighbors,columns=['d1','d2','d3','d4','d5','brand_1',
+                                                         'brand_2','brand_3','brand_4','brand_5'])
+    dist_neighbors_df = dist_neighbors_df.set_index('brand_1')
+    del dist_neighbors_df['d1']
+    dist_neighbors_df.to_csv('similar_brands.csv')
 
 # generating submissions
 submission_2()
